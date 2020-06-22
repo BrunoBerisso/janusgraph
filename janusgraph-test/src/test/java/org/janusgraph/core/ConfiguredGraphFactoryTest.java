@@ -28,6 +28,7 @@ import org.apache.commons.configuration.MapConfiguration;
 
 import java.util.Map;
 import java.util.HashMap;
+import java.util.Set;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.AfterEach;
@@ -216,6 +217,25 @@ public class ConfiguredGraphFactoryTest {
 
             ConfiguredGraphFactory.removeConfiguration("graph1");
             assertNull(gm.getGraph("graph1"));
+        } finally {
+            ConfiguredGraphFactory.removeConfiguration("graph1");
+            ConfiguredGraphFactory.close("graph1");
+        }
+    }
+
+    @Test
+    public void dropGraphShouldRemoveGraphFromCache() throws Exception {
+        try {
+            final Map<String, Object> map = new HashMap<>();
+            map.put(STORAGE_BACKEND.toStringWithoutRoot(), "inmemory");
+            map.put(GRAPH_NAME.toStringWithoutRoot(), "graph1");
+            ConfiguredGraphFactory.createConfiguration(new MapConfiguration(map));
+            final StandardJanusGraph graph = (StandardJanusGraph) ConfiguredGraphFactory.open("graph1");
+            assertNotNull(graph);
+
+            ConfiguredGraphFactory.drop("graph1");
+            assertNull(gm.getGraph("graph1"));
+            assertTrue(graph.isClosed());
         } finally {
             ConfiguredGraphFactory.removeConfiguration("graph1");
             ConfiguredGraphFactory.close("graph1");

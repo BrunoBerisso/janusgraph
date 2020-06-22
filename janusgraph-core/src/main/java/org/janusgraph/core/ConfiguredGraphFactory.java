@@ -155,10 +155,16 @@ public class ConfiguredGraphFactory {
      * @throws BackendException If an error occurs during deletion
      * @throws ConfigurationManagementGraphNotEnabledException If ConfigurationManagementGraph not
      */
-    public static void drop(String graphName) throws Exception {
-        final StandardJanusGraph graph = (StandardJanusGraph) ConfiguredGraphFactory.close(graphName);
+    public static void drop(String graphName) throws BackendException, ConfigurationManagementGraphNotEnabledException, Exception {
+        final ConfigurationManagementGraph configManagementGraph = getConfigGraphManagementInstance();
+        configManagementGraph.removeConfiguration(graphName);
+
+        final JanusGraphManager jgm = JanusGraphManagerUtility.getInstance();
+        Preconditions.checkNotNull(jgm, JANUS_GRAPH_MANAGER_EXPECTED_STATE_MSG);
+
+        final StandardJanusGraph graph = (StandardJanusGraph) jgm.getGraph(graphName);
+        removeGraphFromCache(graph);
         JanusGraphFactory.drop(graph);
-        removeConfiguration(graphName);
     }
 
     private static ConfigurationManagementGraph getConfigGraphManagementInstance() {
