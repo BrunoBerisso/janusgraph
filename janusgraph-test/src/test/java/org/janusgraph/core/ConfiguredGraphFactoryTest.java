@@ -14,6 +14,7 @@
 
 package org.janusgraph.core;
 
+import com.datastax.driver.core.Session;
 import org.janusgraph.graphdb.configuration.builder.GraphDatabaseConfigurationBuilder;
 import org.janusgraph.graphdb.management.JanusGraphManager;
 import org.janusgraph.graphdb.management.ConfigurationManagementGraph;
@@ -26,16 +27,35 @@ import static org.janusgraph.graphdb.configuration.GraphDatabaseConfiguration.ST
 import org.apache.tinkerpop.gremlin.server.Settings;
 import org.apache.commons.configuration.MapConfiguration;
 
+import java.time.Duration;
 import java.util.Map;
 import java.util.HashMap;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.AfterEach;
+import org.testcontainers.containers.CassandraContainer;
+import org.testcontainers.junit.jupiter.Container;
+import org.testcontainers.junit.jupiter.Testcontainers;
+
+import static org.janusgraph.graphdb.configuration.GraphDatabaseConfiguration.STORAGE_HOSTS;
+import static org.janusgraph.graphdb.configuration.GraphDatabaseConfiguration.STORAGE_PORT;
 import static org.junit.jupiter.api.Assertions.*;
 
+@Testcontainers
 public class ConfiguredGraphFactoryTest {
+
+    private static final String CASSANDRA_VERSION = "3.11.6";
+    private static final String CASSANDRA_IMAGE = "cassandra";
+
+    @Container
+    public static final CassandraContainer cqlContainer;
     private static final JanusGraphManager gm;
+
     static {
+        cqlContainer = new CassandraContainer<>(CASSANDRA_IMAGE + ":" + CASSANDRA_VERSION)
+            .withExposedPorts(9042)
+            .withStartupAttempts(1)
+            .withStartupTimeout(Duration.ofMinutes(10));
         gm = new JanusGraphManager(new Settings());
         final Map<String, Object> map = new HashMap<>();
         map.put(STORAGE_BACKEND.toStringWithoutRoot(), "inmemory");
@@ -216,6 +236,34 @@ public class ConfiguredGraphFactoryTest {
 
             ConfiguredGraphFactory.removeConfiguration("graph1");
             assertNull(gm.getGraph("graph1"));
+        } finally {
+            ConfiguredGraphFactory.removeConfiguration("graph1");
+            ConfiguredGraphFactory.close("graph1");
+        }
+    }
+
+    @Test
+    public void dropGraphShouldRemoveGraphFromCache() throws Exception {
+        try {
+            final Map<String, Object> map = new HashMap<>();
+            map.put(STORAGE_BACKEND.toStringWithoutRoot(), "cql");
+            map.put(STORAGE_HOSTS.toStringWithoutRoot(), cqlContainer.getContainerIpAddress());
+            map.put(STORAGE_PORT.toStringWithoutRoot(), cqlContainer.getFirstMappedPort());
+            map.put(GRAPH_NAME.toStringWithoutRoot(), "graph1");
+            ConfiguredGraphFactory.createConfiguration(new MapConfiguration(map));
+
+            final StandardJanusGraph graph = (StandardJanusGraph) ConfiguredGraphFactory.open("graph1");
+            assertNotNull(graph);
+
+            ConfiguredGraphFactory.drop("graph1");
+            assertNull(gm.getGraph("graph1"));
+            assertTrue(graph.isClosed());
+
+            Session cql = cqlContainer.getCluster().connect();
+            Object graph_keyspace = cql.execute("SELECT * FROM system_schema.keyspaces WHERE keyspace_name = ?", "graph1").one();
+            cql.close();
+
+            assertNull(graph_keyspace);
         } finally {
             ConfiguredGraphFactory.removeConfiguration("graph1");
             ConfiguredGraphFactory.close("graph1");
