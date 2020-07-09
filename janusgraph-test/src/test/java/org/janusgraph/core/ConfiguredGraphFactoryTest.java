@@ -15,6 +15,7 @@
 package org.janusgraph.core;
 
 import com.datastax.driver.core.Session;
+import org.janusgraph.JanusGraphCassandraContainer;
 import org.janusgraph.graphdb.configuration.builder.GraphDatabaseConfigurationBuilder;
 import org.janusgraph.graphdb.management.JanusGraphManager;
 import org.janusgraph.graphdb.management.ConfigurationManagementGraph;
@@ -33,7 +34,6 @@ import java.util.HashMap;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.AfterEach;
-import org.testcontainers.containers.CassandraContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
@@ -44,18 +44,11 @@ import static org.junit.jupiter.api.Assertions.*;
 @Testcontainers
 public class ConfiguredGraphFactoryTest {
 
-    private static final String CASSANDRA_VERSION = "3.11.6";
-    private static final String CASSANDRA_IMAGE = "cassandra";
-
     @Container
-    public static final CassandraContainer cqlContainer;
+    public static final JanusGraphCassandraContainer cqlContainer;
     private static final JanusGraphManager gm;
 
     static {
-        cqlContainer = new CassandraContainer<>(CASSANDRA_IMAGE + ":" + CASSANDRA_VERSION)
-            .withExposedPorts(9042)
-            .withStartupAttempts(1)
-            .withStartupTimeout(Duration.ofMinutes(10));
         gm = new JanusGraphManager(new Settings());
         final Map<String, Object> map = new HashMap<>();
         map.put(STORAGE_BACKEND.toStringWithoutRoot(), "inmemory");
@@ -63,6 +56,9 @@ public class ConfiguredGraphFactoryTest {
         final StandardJanusGraph graph = new StandardJanusGraph(new GraphDatabaseConfigurationBuilder().build(new CommonsConfiguration(config)));
         // Instantiate the ConfigurationManagementGraph Singleton
         new ConfigurationManagementGraph(graph);
+        cqlContainer = new JanusGraphCassandraContainer()
+            .withStartupAttempts(1)
+            .withStartupTimeout(Duration.ofMinutes(10));
     }
 
     @AfterEach
